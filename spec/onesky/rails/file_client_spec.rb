@@ -11,21 +11,24 @@ describe Onesky::Rails::FileClient do
   end
 
   context '#upload' do
-    it 'all translation files to onesky' do
+    it 'strings to onesky' do
       stub_request(:post, full_path_with_auth_hash("/projects/#{config_hash['project_id']}/files", config_hash['api_key'], config_hash['api_secret']))
         .to_return(status: 201)
 
-      expect(client.upload(file_path)).to match_array(["#{file_path}/en.yml","#{file_path}/special_en.yml"])
+      expect(client.upload(file_path)).to eq(["#{file_path}/en.yml"])
     end
   end
 
   context 'download' do
 
-    let(:expected_locale_files) do
-      ["#{locale_dir}/ja.yml", "#{locale_dir}/special_ja.yml"]
+    let(:file_name) {'ja.yml'}
+    let(:response_headers) do
+      {
+        'Content-Type'        => 'text/plain',
+        'Content-Disposition' => "attachment; filename=#{file_name}",
+      }
     end
-
-    let(:file_names) {['en.yml', 'special_en.yml']}
+    let(:query_string) {'&source_file_name=en.yml&locale=ja'}
 
     def locale_dir
       File.join(file_path, 'onesky_ja')
@@ -51,29 +54,16 @@ describe Onesky::Rails::FileClient do
     end
 
     it 'download translations from OneSky and save as YAML files' do
-      prepare_download_requests!
+      stub_request(:get, full_path_with_auth_hash("/projects/#{config_hash['project_id']}/translations", config_hash['api_key'], config_hash['api_secret']) + query_string)
+        .to_return(
+          status: 200,
+          body: File.read(File.join(file_path, file_name)),
+          headers: response_headers)
 
       expect(locale_files).to be_empty
       client.download(file_path)
-      expect(locale_files).to match_array(expected_locale_files)
+      expect(locale_files).to eq(["#{locale_dir}/#{file_name}"])
     end
-
-    def prepare_download_requests!
-      Timecop.freeze
-      file_names.each do |file_name|
-        response_headers = {
-          'Content-Type'        => 'text/plain',
-          'Content-Disposition' => "attachment; filename=#{file_name}",
-        }
-        query_string = "&source_file_name=#{file_name}&locale=ja"
-        stub_request(:get, full_path_with_auth_hash("/projects/#{config_hash['project_id']}/translations", config_hash['api_key'], config_hash['api_secret']) + query_string)
-          .to_return(
-            status: 200,
-            body: File.read(File.join(file_path, file_name)),
-            headers: response_headers)
-      end
-    end
-
   end
 
 end
